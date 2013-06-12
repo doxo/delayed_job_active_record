@@ -65,7 +65,7 @@ module Delayed
             reserved[0]
           when "MySQL", "Mysql2"
             jobs = ready_scope.limit(1).lock(true)
-            job = jobs.first; j.update_attributes(:locked_at => now, :locked_by => worker.name) if j.present?
+            job = jobs.first; job.update_attributes(:locked_at => now, :locked_by => worker.name) if job.present?
             job
           else
             # This is our old fashion, tried and true, but slower lookup
