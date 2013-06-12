@@ -64,9 +64,11 @@ module Delayed
             reserved          = self.find_by_sql(["UPDATE #{quoted_table_name} SET locked_at = ?, locked_by = ? WHERE id IN (#{subquery_sql}) RETURNING *", now, worker.name])
             reserved[0]
           when "MySQL", "Mysql2"
-            jobs = ready_scope.limit(1).lock(true)
-            job = jobs.first; job.update_attributes(:locked_at => now, :locked_by => worker.name) if job.present?
-            job
+            self.transaction do
+              jobs = ready_scope.limit(1).lock(true)
+              job = jobs.first; job.update_attributes(:locked_at => now, :locked_by => worker.name) if job.present?
+              job
+            end
           else
             # This is our old fashion, tried and true, but slower lookup
             ready_scope.limit(worker.read_ahead).detect do |job|
