@@ -52,29 +52,10 @@ module Delayed
 
           now = self.db_time_now
 
-          # Optimizations for faster lookups on some common databases
-          case self.connection.adapter_name
-          when "PostgreSQL"
-            # Custom SQL required for PostgreSQL because postgres does not support UPDATE...LIMIT
-            # This locks the single record 'FOR UPDATE' in the subquery (http://www.postgresql.org/docs/9.0/static/sql-select.html#SQL-FOR-UPDATE-SHARE)
-            # Note: active_record would attempt to generate UPDATE...LIMIT like sql for postgres if we use a .limit() filter, but it would not use
-            # 'FOR UPDATE' and we would have many locking conflicts
-            quoted_table_name = self.connection.quote_table_name(self.table_name)
-            subquery_sql      = ready_scope.limit(1).lock(true).select('id').to_sql
-            reserved          = self.find_by_sql(["UPDATE #{quoted_table_name} SET locked_at = ?, locked_by = ? WHERE id IN (#{subquery_sql}) RETURNING *", now, worker.name])
-            reserved[0]
-          when "MySQL", "Mysql2"
-            self.transaction do
-              jobs = ready_scope.limit(1).lock(true)
-              job = jobs.first; job.update_attributes(:locked_at => now, :locked_by => worker.name) if job.present?
-              job
-            end
-          else
-            # This is our old fashion, tried and true, but slower lookup
-            ready_scope.limit(worker.read_ahead).detect do |job|
-              count = ready_scope.where(:id => job.id).update_all(:locked_at => now, :locked_by => worker.name)
-              count == 1 && job.reload
-            end
+          # This is our old fashion, tried and true, but slower lookup
+          ready_scope.limit(worker.read_ahead).detect do |job|
+            count = ready_scope.where(:id => job.id).update_all(:locked_at => now, :locked_by => worker.name)
+            count == 1 && job.reload
           end
         end
 
